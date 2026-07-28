@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Marco Island Offshore Monitor</title>
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Share+Tech+Mono&display=swap">
+
+  <style>
+    :root {
+      --bg-dark: #070a13;
+      --panel-bg: #111827;
+      --panel-border: #1f2937;
+      --text-main: #f3f4f6;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-dim: rgba(56, 189, 248, 0.15);
+      --calc-accent: #a78bfa;
+      --calc-accent-dim: rgba(167, 139, 250, 0.15);
+      --card-bg: #070a13;
+      --font-mono: 'Share Tech Mono', monospace;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      width: 100%;
+      height: 100vh;                         /* fallback for old browsers */
+      height: calc(var(--vh, 1vh) * 100);    /* JS-corrected value, fixes iOS Safari address-bar resize */
+      height: 100dvh;                        /* modern dynamic viewport unit, best on iOS 16+ */
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      overflow: hidden;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+    }
+
+    /* Desktop Layout */
+    .app-wrapper {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100vh;
+      height: calc(var(--vh, 1vh) * 100);
+      height: 100dvh;
+    }
+
+    header {
+      width: 100%;
+      height: 50px;
+      min-height: 50px;
+      background-color: var(--panel-bg);
+      border-bottom: 1px solid var(--panel-border);
+      padding: 0 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 1000;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 0.95rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.5rem; }
+    header span { font-size: 0.75rem; color: var(--text-muted); }
+
+    .content-area {
+      display: flex;
+      flex: 1;
+      width: 100%;
+      height: calc(100vh - 50px);
+      height: calc((var(--vh, 1vh) * 100) - 50px);
+      height: calc(100dvh - 50px);
+      position: relative;
+    }
+
+    #map-container {
+      flex: 1;
+      height: 100%;
+      position: relative;
+      background: #0f172a;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 1;
+    }
+
+    .sidebar {
+      width: 380px;
+      height: 100%;
+      background-color: var(--panel-bg);
+      border-left: 1px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      z-index: 2;
+    }
+
+    .panel-section { padding: 0.85rem; border-bottom: 1px solid var(--panel-border); flex-shrink: 0; }
+    .panel-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.6rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+
+    .location-card { background-color: var(--card-bg); border: 1px solid var(--panel-border); border-radius: 8px; padding: 0.75rem; position: relative; overflow: hidden;}
+    .location-card .coords { font-family: var(--font-mono); font-size: 1.05rem; color: var(--text-main); margin-bottom: 0.3rem; }
+
+    #dist-animation { position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: rgba(255,255,255,0.05); }
+    #dist-bar { height: 100%; width: 0%; background: var(--accent); transition: width 0.4s ease-out; }
+
+    .tag-container { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.3rem; flex-wrap: wrap; }
+    .distance-tag { display: inline-block; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
+    .tag-obs { background-color: var(--accent-dim); color: var(--accent); border: 1px solid rgba(56, 189, 248, 0.4); }
+    .tag-calc { background-color: var(--calc-accent-dim); color: var(--calc-accent); border: 1px solid rgba(167, 139, 250, 0.4); }
+    .source-badge { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 3px; background: #334155; color: #cbd5e1; }
+
+    .metrics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; padding-bottom: 2rem; }
+    .metric-card { background-color: var(--card-bg); border: 1px solid var(--panel-border); border-radius: 8px; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.1rem; }
+    .metric-card i { color: var(--accent); font-size: 0.9rem; margin-bottom: 0.1rem; }
+    .metric-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; }
+    .metric-value { font-family: var(--font-mono); font-size: 1.2rem; color: var(--text-main); }
+    .metric-unit { font-size: 0.8rem; color: var(--text-muted); margin-left: 0.1rem;}
+    .metric-sub { font-size: 0.7rem; color: var(--text-muted); }
+
+    .preset-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; margin-bottom: 0.4rem;}
+    .preset-btns-row2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.4rem;}
+    
+    .btn { 
+      background-color: var(--card-bg); 
+      border: 1px solid var(--panel-border); 
+      color: var(--text-muted); 
+      padding: 0.65rem 0.4rem; 
+      border-radius: 6px; 
+      font-size: 0.75rem; 
+      font-weight: 600; 
+      text-align: center;
+      touch-action: manipulation;
+    }
+    .btn.active { background-color: var(--accent); color: #0f172a; border-color: var(--accent); font-weight: 700; }
+    .btn-calc.active { background-color: var(--calc-accent); color: #0f172a; border-color: var(--calc-accent); }
+
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; color: var(--text-muted); margin-top: 0.3rem;}
+    .legend-line { width: 16px; height: 2px; }
+
+    .loader { display: none; border: 2px solid var(--panel-border); border-top: 2px solid var(--accent); border-radius: 50%; width: 12px; height: 12px; animation: spin 0.8s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    .ring-label-icon {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid #475569;
+      color: #f8fafc;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      padding: 1px 3px;
+      border-radius: 3px;
+    }
+
+    /* IPHONE STACKED MOBILE LAYOUT */
+    @media screen and (max-width: 768px) {
+      .content-area {
+        flex-direction: column;
+        height: calc(100vh - 50px);
+        height: calc((var(--vh, 1vh) * 100) - 50px);
+        height: calc(100dvh - 50px);
+      }
+
+      #map-container {
+        width: 100% !important;
+        height: 40vh !important;
+        height: calc(var(--vh, 1vh) * 40) !important;
+        min-height: 220px !important;
+        flex-shrink: 0;
+      }
+
+      .sidebar {
+        width: 100% !important;
+        height: 60vh !important;
+        height: calc(var(--vh, 1vh) * 60) !important;
+        flex: 1;
+        border-left: none;
+        border-top: 2px solid var(--panel-border);
+        padding-bottom: env(safe-area-inset-bottom, 30px);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-wrapper">
+    <header>
+      <h1><i class="fa-solid fa-tower-broadcast"></i> Marco Offshore Monitor</h1>
+      <span>Tap map or waypoints</span>
+    </header>
+
+    <div class="content-area">
+      <div id="map-container">
+        <div id="map"></div>
+      </div>
+
+      <div class="sidebar">
+        <div class="panel-section">
+          <div class="panel-title">Quick Waypoints (WSW Heading)</div>
+          <div class="preset-btns">
+            <button class="btn active" id="btn-10" type="button">10 NM</button>
+            <button class="btn" id="btn-35" type="button">35 NM</button>
+            <button class="btn" id="btn-70" type="button">70 NM (42023)</button>
+          </div>
+          <div class="preset-btns-row2">
+            <button class="btn btn-calc" id="btn-50" type="button">50 Mi (Calc)</button>
+            <button class="btn btn-calc" id="btn-100" type="button">100 Mi (Calc)</button>
+          </div>
+          <div class="legend-item">
+            <div class="legend-line" style="background: var(--accent);"></div> <span>Observed Zones (verified buoy)</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-line" style="background: var(--calc-accent); border-top: 1px dashed var(--calc-accent);"></div> <span>Calculated Zones (shelf model)</span>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-title">
+            <span>Target Coordinates</span>
+            <div class="loader" id="loader"></div>
+          </div>
+          <div class="location-card">
+            <div class="coords" id="disp-coords">25.9400° N, 81.7167° W</div>
+            <div class="tag-container">
+              <span class="distance-tag tag-obs" id="disp-distance">0 NM Offshore</span>
+              <span class="source-badge" id="disp-zone">Nearshore</span>
+            </div>
+            <div id="dist-animation"><div id="dist-bar"></div></div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-title">Live Telemetry</div>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <i class="fa-solid fa-water"></i>
+              <span class="metric-label">Wave Height</span>
+              <div><span class="metric-value" id="val-wave-height">--</span><span class="metric-unit">ft</span></div>
+              <span class="metric-sub" id="val-wave-direction">Dir: --</span>
+            </div>
+
+            <div class="metric-card">
+              <i class="fa-solid fa-stopwatch"></i>
+              <span class="metric-label">Dominant Period</span>
+              <div><span class="metric-value" id="val-wave-period">--</span><span class="metric-unit">sec</span></div>
+              <span class="metric-sub">Swell Interval</span>
+            </div>
+
+            <div class="metric-card">
+              <i class="fa-solid fa-wind"></i>
+              <span class="metric-label">Wind Speed</span>
+              <div><span class="metric-value" id="val-wind-speed">--</span><span class="metric-unit">mph</span></div>
+              <span class="metric-sub" id="val-wind-gust">Gust: -- mph</span>
+            </div>
+
+            <div class="metric-card">
+              <i class="fa-solid fa-location-arrow"></i>
+              <span class="metric-label">Wind Direction</span>
+              <div><span class="metric-value" id="val-wind-dir">--</span><span class="metric-unit">°</span></div>
+              <span class="metric-sub" id="val-wind-cardinal">Bearing</span>
+            </div>
+
+            <div class="metric-card">
+              <i class="fa-solid fa-gauge-high"></i>
+              <span class="metric-label">Barometer</span>
+              <div><span class="metric-value" id="val-pressure">--</span><span class="metric-unit">mb</span></div>
+              <span class="metric-sub">Sea Level</span>
+            </div>
+
+            <div class="metric-card">
+              <i class="fa-solid fa-arrows-spin"></i>
+              <span class="metric-label">Ocean Current</span>
+              <div><span class="metric-value" id="val-current">--</span><span class="metric-unit">mph</span></div>
+              <span class="metric-sub">Surface Flow</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JS Dependencies -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    let originLat = 25.9400;
+    let originLon = -81.7167;
+    const BEARING_WSW = 245;
+
+    let lastValidTarget = { lat: 25.860, lng: -82.160 };
+    const MAX_ALLOWED_DISTANCE_MI = 140;
+
+    const MIL_TOWERS = [
+      { name: "Tower R7", lat: 25.860, lon: -82.160, desc: "Decommissioned Military Tower." },
+      { name: "Tower R2", lat: 25.680, lon: -82.010, desc: "Decommissioned Military Radio Platform." },
+    ];
+
+    let map, originMarker, targetMarker, vectorLine;
+    let rangeRings = [];
+    let rangeLabels = [];
+
+    const RING_CONFIG = [
+      { dist: 10, unit: 'NM', color: '#38bdf8', isDash: false },
+      { dist: 35, unit: 'NM', color: '#38bdf8', isDash: false },
+      { dist: 50, unit: 'Mi', color: '#a78bfa', isDash: true },
+      { dist: 70, unit: 'NM', color: '#38bdf8', isDash: false },
+      { dist: 100, unit: 'Mi', color: '#a78bfa', isDash: true }
+    ];
+
+    function forceMapResize() {
+      if (map) {
+        map.invalidateSize(true);
+      }
+    }
+
+    // iOS Safari's 100vh is based on the viewport with the address bar collapsed,
+    // not what's actually visible on screen. That mismatch is what makes the
+    // sidebar/buttons get cut off below the fold on iPhone/iPad even though the
+    // same CSS renders fine on desktop. We measure the real visible height in JS
+    // and expose it as --vh, which the CSS above uses as its middle fallback.
+    function setViewportHeight() {
+      const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight) * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+
+    setViewportHeight();
+    window.addEventListener('resize', setViewportHeight);
+    window.addEventListener('orientationchange', setViewportHeight);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', setViewportHeight);
+      window.visualViewport.addEventListener('scroll', setViewportHeight);
+    }
+
+    window.addEventListener('load', function() {
+      // Delay initialization slightly to let iOS Mobile Safari complete layout painting
+      setTimeout(() => {
+        setViewportHeight();
+        initMap();
+        setupButtons();
+        selectPreset(10, 'btn-10');
+      }, 100);
+
+      // Repeated safety loops to catch iOS render delays
+      setTimeout(() => { setViewportHeight(); forceMapResize(); }, 400);
+      setTimeout(() => { setViewportHeight(); forceMapResize(); }, 1000);
+    });
+
+    window.addEventListener('resize', forceMapResize);
+    window.addEventListener('orientationchange', forceMapResize);
+    document.addEventListener('touchstart', forceMapResize, { passive: true, once: true });
+
+    function setupButtons() {
+      const btns = [
+        { id: 'btn-10', dist: 10 },
+        { id: 'btn-35', dist: 35 },
+        { id: 'btn-70', dist: 70 },
+        { id: 'btn-50', dist: 50 },
+        { id: 'btn-100', dist: 100 }
+      ];
+
+      btns.forEach(b => {
+        const el = document.getElementById(b.id);
+        if (el) {
+          el.addEventListener('click', function(e) {
+            e.preventDefault();
+            selectPreset(b.dist, b.id);
+          });
+        }
+      });
+    }
+
+    function initMap() {
+      map = L.map('map', { 
+        zoomControl: true, 
+        attributionControl: false
+      }).setView([originLat - 0.3, originLon - 0.8], 8);
+
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 13,
+        minZoom: 5
+      }).addTo(map);
+
+      const originIcon = L.divIcon({
+        html: '<div style="background:#38bdf8; border:2px solid #fff; width:16px; height:16px; border-radius:50%; box-shadow:0 0 8px rgba(0,0,0,0.8);"></div>',
+        className: 'origin-pin',
+        iconSize: [16, 16], iconAnchor: [8, 8]
+      });
+
+      originMarker = L.marker([originLat, originLon], { draggable: true, icon: originIcon }).addTo(map);
+
+      originMarker.on('drag', function(e) {
+        const newPos = e.target.getLatLng();
+        originLat = newPos.lat;
+        originLon = newPos.lng;
+        redrawRings();
+        updateVectorLine();
+      });
+
+      originMarker.on('dragend', function() {
+        if (targetMarker) {
+          const tPos = targetMarker.getLatLng();
+          updateTargetLocation(tPos.lat, tPos.lng);
+        }
+      });
+
+      redrawRings();
+
+      const towerIcon = L.divIcon({
+        html: '<i class="fa-solid fa-tower-broadcast" style="color: #ef4444; font-size: 16px;"></i>',
+        iconSize: [16, 16], iconAnchor: [8, 8], className: 'tower-icon'
+      });
+
+      MIL_TOWERS.forEach(tower => {
+        L.marker([tower.lat, tower.lon], { icon: towerIcon }).addTo(map)
+          .bindPopup(`<b>${tower.name}</b><br>${tower.desc}`);
+      });
+
+      map.on('click', function(e) {
+        const dist = getDistanceMi(originLat, originLon, e.latlng.lat, e.latlng.lng);
+        if (dist > MAX_ALLOWED_DISTANCE_MI) {
+          alert(`Selected position is outside coverage area.`);
+          return;
+        }
+        document.querySelectorAll('.preset-btns .btn, .preset-btns-row2 .btn').forEach(btn => btn.classList.remove('active'));
+        updateTargetLocation(e.latlng.lat, e.latlng.lng);
+      });
+      
+      forceMapResize();
+    }
+
+    function redrawRings() {
+      rangeRings.forEach(r => map.removeLayer(r));
+      rangeLabels.forEach(l => map.removeLayer(l));
+      rangeRings = [];
+      rangeLabels = [];
+
+      RING_CONFIG.forEach(cfg => {
+        const miles = cfg.unit === 'NM' ? cfg.dist * 1.15078 : cfg.dist;
+        const meters = miles * 1609.34;
+
+        const circle = L.circle([originLat, originLon], {
+          radius: meters,
+          color: cfg.color,
+          weight: 1.5,
+          fillColor: 'transparent',
+          dashArray: cfg.isDash ? '6, 8' : null,
+          interactive: false
+        }).addTo(map);
+        rangeRings.push(circle);
+
+        const labelPos = calculateDestinationFrom(originLat, originLon, miles, BEARING_WSW);
+        const labelIcon = L.divIcon({
+          className: 'ring-label-wrapper',
+          html: `<div class="ring-label-icon" style="border-color:${cfg.color};">${cfg.dist} ${cfg.unit}</div>`,
+          iconSize: [50, 16],
+          iconAnchor: [25, 8]
+        });
+
+        const labelMarker = L.marker([labelPos.lat, labelPos.lng], { icon: labelIcon, interactive: false }).addTo(map);
+        rangeLabels.push(labelMarker);
+      });
+    }
+
+    const knotsToMph = (kt) => kt * 1.15078;
+    const msToMph = (ms) => ms * 2.23694;
+
+    function calculateDestinationFrom(lat, lon, distanceMi, bearingDeg) {
+      const R = 3958.8;
+      const brng = (bearingDeg * Math.PI) / 180;
+      const lat1 = (lat * Math.PI) / 180;
+      const lon1 = (lon * Math.PI) / 180;
+
+      const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distanceMi / R) +
+                   Math.cos(lat1) * Math.sin(distanceMi / R) * Math.cos(brng));
+      
+      const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distanceMi / R) * Math.cos(lat1),
+                   Math.cos(distanceMi / R) - Math.sin(lat1) * Math.sin(lat2));
+
+      return { lat: (lat2 * 180) / Math.PI, lng: (lon2 * 180) / Math.PI };
+    }
+
+    function getDistanceMi(lat1, lon1, lat2, lon2) {
+      const R = 3958.8;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    function selectPreset(dist, btnId) {
+      document.querySelectorAll('.preset-btns .btn, .preset-btns-row2 .btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.getElementById(btnId);
+      if (activeBtn) activeBtn.classList.add('active');
+      
+      let distanceMi = dist;
+      if (btnId === 'btn-10' || btnId === 'btn-35' || btnId === 'btn-70') {
+        distanceMi = dist * 1.15078;
+      }
+
+      const target = calculateDestinationFrom(originLat, originLon, distanceMi, BEARING_WSW);
+      updateTargetLocation(target.lat, target.lng);
+    }
+
+    function updateVectorLine() {
+      if (targetMarker && originMarker) {
+        const tPos = targetMarker.getLatLng();
+        const oPos = originMarker.getLatLng();
+        if (vectorLine) map.removeLayer(vectorLine);
+        vectorLine = L.polyline([[oPos.lat, oPos.lng], [tPos.lat, tPos.lng]], {
+          color: '#38bdf8',
+          weight: 2,
+          dashArray: '5, 8'
+        }).addTo(map);
+      }
+    }
+
+    function updateTargetLocation(lat, lng) {
+      const distMi = getDistanceMi(originLat, originLon, lat, lng);
+      const distNM = distMi / 1.15078;
+
+      if (distMi > MAX_ALLOWED_DISTANCE_MI) {
+        alert(`Target is outside coverage area.`);
+        if (targetMarker) targetMarker.setLatLng([lastValidTarget.lat, lastValidTarget.lng]);
+        updateVectorLine();
+        return;
+      }
+
+      if (!targetMarker) {
+        targetMarker = L.marker([lat, lng], { draggable: true }).addTo(map);
+
+        targetMarker.on('drag', function() {
+          updateVectorLine();
+        });
+
+        targetMarker.on('dragend', function(e) {
+          const pos = e.target.getLatLng();
+          document.querySelectorAll('.preset-btns .btn, .preset-btns-row2 .btn').forEach(btn => btn.classList.remove('active'));
+          updateTargetLocation(pos.lat, pos.lng);
+        });
+      } else {
+        targetMarker.setLatLng([lat, lng]);
+      }
+
+      updateVectorLine();
+
+      document.getElementById('disp-coords').innerText = `${lat.toFixed(4)}° N, ${Math.abs(lng).toFixed(4)}° W`;
+      document.getElementById('disp-distance').innerText = `${distMi.toFixed(1)} Mi / ${distNM.toFixed(1)} NM Out`;
+      
+      const zoneBadge = document.getElementById('disp-zone');
+      const distTag = document.getElementById('disp-distance');
+      const distBar = document.getElementById('dist-bar');
+
+      const buoyMi = 70 * 1.15078;
+      const isObservedZone = Math.abs(distMi - buoyMi) < 30 || distNM < 15;
+
+      if (distNM <= 15) {
+        zoneBadge.innerText = 'Nearshore (Verified)';
+        zoneBadge.style.background = '#0284c7';
+      } else if (distNM <= 50) {
+        zoneBadge.innerText = 'Mid-Shelf (Verified)';
+        zoneBadge.style.background = '#d97706';
+      } else if (isObservedZone) {
+        zoneBadge.innerText = 'Offshore (verified by 42023)';
+        zoneBadge.style.background = '#16a34a';
+      } else {
+        zoneBadge.innerText = 'Calculated Shelf Model';
+        zoneBadge.style.background = '#6d28d9';
+      }
+
+      if (isObservedZone) {
+        distTag.className = 'distance-tag tag-obs';
+        distBar.style.background = 'var(--accent)';
+      } else {
+        distTag.className = 'distance-tag tag-calc';
+        distBar.style.background = 'var(--calc-accent)';
+      }
+
+      const barWidth = Math.min(100, (distMi / 120) * 100);
+      distBar.style.width = `${barWidth}%`;
+
+      fetchMarineData(lat, lng);
+    }
+
+    async function fetchMarineData(lat, lng) {
+      document.getElementById('loader').style.display = 'block';
+
+      const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&current=wave_height,wave_period,wave_direction,ocean_current_velocity&length_unit=imperial`;
+      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure&wind_speed_unit=kn`;
+
+      try {
+        const [marineRes, weatherRes] = await Promise.all([
+          fetch(marineUrl).then(res => res.json()),
+          fetch(weatherUrl).then(res => res.json())
+        ]);
+
+        const marine = marineRes.current || {};
+        const weather = weatherRes.current || {};
+
+        if (marine.wave_height === undefined || marine.wave_height === null) {
+          const zoneBadge = document.getElementById('disp-zone');
+          zoneBadge.innerText = 'Inland / Out of Marine Bounds';
+          zoneBadge.style.background = 'var(--danger)';
+
+          document.getElementById('val-wave-height').innerText = 'N/A';
+          document.getElementById('val-wave-period').innerText = 'N/A';
+          document.getElementById('val-wave-direction').innerText = 'Dir: N/A';
+          document.getElementById('val-current').innerText = 'N/A';
+          return;
+        }
+
+        lastValidTarget = { lat, lng };
+
+        document.getElementById('val-wave-height').innerText = marine.wave_height.toFixed(1);
+        document.getElementById('val-wave-period').innerText = marine.wave_period !== undefined ? marine.wave_period.toFixed(1) : '--';
+        document.getElementById('val-wave-direction').innerText = marine.wave_direction !== undefined ? `Dir: ${marine.wave_direction}°` : 'Dir: --';
+
+        if (weather.wind_speed_10m !== undefined) {
+          const windMph = knotsToMph(weather.wind_speed_10m);
+          const gustMph = knotsToMph(weather.wind_gusts_10m || 0);
+          document.getElementById('val-wind-speed').innerText = Math.round(windMph);
+          document.getElementById('val-wind-gust').innerText = gustMph > 0 ? `Gust: ${Math.round(gustMph)} mph` : 'Gust: --';
+        } else {
+          document.getElementById('val-wind-speed').innerText = '--';
+          document.getElementById('val-wind-gust').innerText = 'Gust: --';
+        }
+
+        document.getElementById('val-wind-dir').innerText = weather.wind_direction_10m !== undefined ? weather.wind_direction_10m : '--';
+        document.getElementById('val-wind-cardinal').innerText = weather.wind_direction_10m !== undefined ? getCardinalDirection(weather.wind_direction_10m) : '--';
+        
+        document.getElementById('val-pressure').innerText = weather.surface_pressure !== undefined ? Math.round(weather.surface_pressure) : '--';
+
+        if (marine.ocean_current_velocity !== undefined) {
+          const currentMph = msToMph(marine.ocean_current_velocity);
+          document.getElementById('val-current').innerText = currentMph.toFixed(1);
+        } else {
+          document.getElementById('val-current').innerText = '--';
+        }
+
+      } catch (err) {
+        console.error("API Fetch Error:", err);
+      } finally {
+        document.getElementById('loader').style.display = 'none';
+      }
+    }
+
+    function getCardinalDirection(deg) {
+      const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+      return directions[Math.round(deg / 22.5) % 16];
+    }
+  </script>
+</body>
+</html>
